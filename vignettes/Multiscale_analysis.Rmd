@@ -1,0 +1,83 @@
+---
+title: "Multi-scale analysis using SIGNAL"
+author: "Yang Zhou"
+date: "2024-06-06"
+output: html_document
+package: SIGNAL
+vignette: |
+  %\VignetteIndexEntry{SIGNAL: exploring group-specific technical variation patterns of single-cell data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+We can use SIGNAL to perform multi-scale analysis of single-cell data to identify cell subtypes specific to tissues, conditions, and developmental stages. In this vignette, we demonstrate on a recently published [developing human immune cell atlas](https://www.science.org/doi/10.1126/science.abo0510) how SIGNAL can be used to integrate in a way that preserves differences between tissues and developmental stages.
+
+```{r, message=FALSE, warning=FALSE}
+library(SIGNAL)
+library(irlba)
+library(uwot)
+library(ggpubr)
+library(randomcoloR)
+library(cowplot)
+set.seed(2024)
+```
+
+# Load data matrix and metadata
+
+We perform data integration on the normalized scRNA-seq gene expression matrix. The HVGs provided by the authors are used.
+
+```{r, message=TRUE, warning=FALSE}
+X = readRDS("/home/server/zy/group_scripts/datasets_preparation/Developing_immune/X.rds")
+meta = readRDS("/home/server/zy/group_scripts/datasets_preparation/Developing_immune/meta.rds")
+str(X)
+str(meta)
+```
+
+# Visualization of raw data
+
+```{r, message=TRUE, warning=FALSE, fig.width=19, fig.height=5}
+Colors = distinctColorPalette(13)
+pca_res = irlba(t(X), nv = 50)
+raw_emb = as.matrix(pca_res$u %*% diag(pca_res$d))
+raw_umap = as.data.frame(umap(raw_emb))
+colnames(raw_umap) = c("UMAP1", "UMAP2")
+raw_umap = cbind.data.frame(meta, raw_umap)
+p1 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "CellType", palette = Colors, legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+p2 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Tissue", palette = Colors, legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+p3 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Stage", palette = Colors, legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+plot_grid(p1, p2, p3, align = 'h', axis = "b", nrow = 1)
+```
+
+# SIGNAL integration
+
+```{r, message=TRUE, warning=FALSE, fig.width=19, fig.height=5}
+signal_emb = Run.gcPCA(X, meta, g_factor = c("Tissue", "Stage"), b_factor = "Batch")
+signal_umap = as.data.frame(umap(t(signal_emb)))
+colnames(signal_umap) = c("UMAP1", "UMAP2")
+signal_umap = cbind.data.frame(meta, signal_umap)
+q1 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "CellType", palette = Colors, legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+q2 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Tissue", palette = Colors, legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+q3 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Stage", palette = Colors, legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+plot_grid(q1, q2, q3, align = 'h', axis = "b", nrow = 1)
+```
+
+<details>
+  <summary>**Session Info**</summary>
+  
+```{r}
+sessionInfo()
+```
+
+</details>

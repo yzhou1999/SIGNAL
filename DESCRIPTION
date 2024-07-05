@@ -1,0 +1,18 @@
+Package: SIGNAL
+Type: Package
+Title: SIngle-cell Group techNical vAriation Learning (SIGNAL)
+Version: 1.0.0
+Date: 2024-05-03
+Author: Yang Zhou
+Maintainer: Yang Zhou <yangz@stu.hit.edu.cn>
+Description: Implementation of the SIGNAL algorithm for single-cell data, described in Zhou Y et al.
+License: GPL-3
+Encoding: UTF-8
+Depends: R (>= 4.0.2)
+Imports: base, stats, Matrix, matrixStats, sparseMatrixStats, mclust, Rcpp, RcppEigen, irlba, BiocNeighbors, bigstatsr, dplyr, RSpectra
+LinkingTo: Rcpp (>= 1.0.8), RcppEigen
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+NeedsCompilation: yes
+URL: https://github.com/yzhou1999/SIGNAL, https://yzhou1999.github.io/SIGNAL/
+BugReports: https://github.com/yzhou1999/SIGNAL/issues

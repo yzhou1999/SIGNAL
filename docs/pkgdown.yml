@@ -1,0 +1,9 @@
+pandoc: 3.1.1
+pkgdown: 2.0.7
+pkgdown_sha: ~
+articles:
+  Knowledge_transfer: Knowledge_transfer.html
+  Multiscale_analysis: Multiscale_analysis.html
+  Supervised_integration: Supervised_integration.html
+last_built: 2024-07-05T06:14Z
+

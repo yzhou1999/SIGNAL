@@ -1,0 +1,89 @@
+---
+title: "Supervised integration using SIGNAL"
+author: "Yang Zhou"
+date: "2024-06-06"
+output: html_document
+package: SIGNAL
+vignette: |
+  %\VignetteIndexEntry{SIGNAL: exploring group-specific technical variation patterns of single-cell data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = FALSE)
+```
+
+# Introduction
+
+SIGNAL can be used to perform supervised integration of single-cell data. Given the metadata ``meta`` (a data frame containing meta information) as inputs, SIGNAL requires a batch variable ``b`` and at least one group variable ``g``. Using a feature-by-cell data matrix ``X`` (a matrix-like object) and batch and group variables, SIGNAL embeds ``X`` from multiple batches into a low-dimensional space that is not affected by batch effects, in which subgroups under the group variables of different batches are aligned together.
+
+In this vignette we will demonstrate how to use SIGNAL to perform supervised integration, i.e., integration using 'cell type' as group variable.
+
+```{r, message=FALSE, warning=FALSE}
+library(SIGNAL)
+library(irlba)
+library(uwot)
+library(ggpubr)
+library(cowplot)
+set.seed(2024)
+```
+
+# Load data matrix and metadata
+
+We demonstrate SIGNAL integration on a commonly used single-cell RNA sequencing (scRNA-seq) [dataset](https://www.10xgenomics.com/datasets/) of cell lines. The highly variable genes (HVGs) are already selected and are used to perform integration.
+
+```{r, message=FALSE, warning=FALSE}
+X = readRDS("/home/server/zy/group_scripts/datasets_preparation/Jurkat_293t/X.rds")
+meta = readRDS("/home/server/zy/group_scripts/datasets_preparation/Jurkat_293t/meta.rds")
+```
+
+We can take a look of the data.
+
+```{r, message=TRUE, warning=FALSE}
+str(X)
+str(meta)
+```
+
+# Visualization of raw data
+
+Let us visualize the raw data using PCA and UMAP.
+
+```{r, message=TRUE, warning=FALSE, fig.width=12, fig.height=5}
+pca_res = irlba(t(X), nv = 30)
+raw_emb = as.matrix(pca_res$u %*% diag(pca_res$d))
+raw_umap = as.data.frame(umap(raw_emb))
+colnames(raw_umap) = c("UMAP1", "UMAP2")
+raw_umap = cbind.data.frame(meta, raw_umap)
+p1 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Batch", palette = "npg", legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+p2 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "CellType", palette = "npg", legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+plot_grid(p1, p2, align = 'h', axis = "b")
+```
+
+We can see that there are batch effects between Jurkat cells from batch 2 and batch 3.
+
+# SIGNAL supervised integration
+
+We perform SIGNAL supervised integration and visualize the integrated result. This usually takes a short time. It can integrate 1 million cells in ~2 minutes.
+```{r, message=TRUE, warning=FALSE, fig.width=12, fig.height=5}
+signal_emb = Run.gcPCA(X, meta, g_factor = "CellType", b_factor = "Batch")
+signal_umap = as.data.frame(umap(t(signal_emb)))
+colnames(signal_umap) = c("UMAP1", "UMAP2")
+signal_umap = cbind.data.frame(meta, signal_umap)
+q1 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Batch", palette = "npg", legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+q2 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "CellType", palette = "npg", legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+plot_grid(q1, q2, align = 'h', axis = "b")
+```
+
+<details>
+  <summary>**Session Info**</summary>
+  
+```{r}
+sessionInfo()
+```
+
+</details>

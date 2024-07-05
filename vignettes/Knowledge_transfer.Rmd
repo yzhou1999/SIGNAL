@@ -1,0 +1,104 @@
+---
+title: "Knowledge transfer from reference to query using SIGNAL"
+author: "Yang Zhou"
+date: "2024-06-06"
+output: html_document
+package: SIGNAL
+vignette: |
+  %\VignetteIndexEntry{SIGNAL: exploring group-specific technical variation patterns of single-cell data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = FALSE)
+```
+
+# Introduction
+
+SIGNAL allows knowledge transfer form reference data to query data, containing two tasks: reference-based annotation and reference-based integration. The latter integrates data based on the labels predicted by the former. In this vignette, we use two human cortex scRNA-seq datasets ([human MTG](https://doi.org/10.1101/2022.09.20.508736) and [human cortex](https://www.science.org/doi/10.1126/science.adf2359) datasets) to demonstrate how to perform these two tasks with SIGNAL. We use the human MTG as the reference and the human cortex as the query. We removed some cell type from reference to test label annotation and integration scenarios with novel cell types in query data.
+
+```{r, message=FALSE, warning=FALSE}
+library(SIGNAL)
+library(irlba)
+library(uwot)
+library(ggpubr)
+library(randomcoloR)
+library(cowplot)
+set.seed(2024)
+```
+
+# Load data
+
+We identify HVGs from reference and read the expression matrix after reference and query have been normalized and subset by HVGs. Among them, 2000 genes in query overlapped with identified HVGs. We represent the missing gene in query as 0.
+
+```{r, message=FALSE, warning=FALSE}
+ref_X = readRDS(paste0("/home/server/zy/group_scripts/datasets_preparation/Human_MTG/X.rds"))
+ref_meta = readRDS(paste0("/home/server/zy/group_scripts/datasets_preparation/Human_MTG/meta.rds"))[, c("Batch", "SubClass")]
+ref_meta$Dataset = "reference"
+ref_meta = ref_meta[which(!ref_meta$SubClass %in% c("Sst Chodl", "L5 ET", "Endothelial", "L4 IT", "Oligodendrocyte", "L2/3 IT")), ]
+ref_X = ref_X[, rownames(ref_meta)]
+
+query_X = readRDS("/home/server/zy/group_scripts/datasets_preparation/Human_cortex/new_X.rds")
+query_meta = readRDS("/home/server/zy/group_scripts/datasets_preparation/Human_cortex/meta.rds")[, c("Batch", "SubClass")]
+query_meta$Dataset = "query"
+str(ref_X)
+str(ref_meta)
+str(query_X)
+str(query_meta)
+
+zero_m = sparseMatrix(i = integer(0), j = integer(0), dims = c(nrow(ref_X) - nrow(query_X), ncol(query_X)))
+rownames(zero_m) = setdiff(rownames(ref_X), rownames(query_X))
+colnames(zero_m) = colnames(query_X)
+query_X = rbind(query_X, zero_m)[rownames(ref_X), ]
+```
+
+# Visualization of raw data
+
+```{r, message=TRUE, warning=FALSE, fig.width=13, fig.height=5}
+Colors = distinctColorPalette(24)
+X = cbind(ref_X, query_X)
+meta = rbind.data.frame(ref_meta, query_meta)
+pca_res = irlba(t(X), nv = 50)
+raw_emb = as.matrix(pca_res$u %*% diag(pca_res$d))
+raw_umap = as.data.frame(umap(raw_emb))
+colnames(raw_umap) = c("UMAP1", "UMAP2")
+raw_umap = cbind.data.frame(meta, raw_umap)
+p1 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Dataset", palette = c("#196534", "#9ED089"), legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+p2 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "SubClass", palette = Colors, legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+plot_grid(p1, p2, align = 'h', axis = "b")
+```
+
+# Label prediction and reference-based integration
+
+We check whether SIGNAL can distinguish between cell types removed from reference.
+
+```{r, message=TRUE, warning=FALSE, fig.width=13, fig.height=5}
+predicted_labels = Run.LabelTransfer.Single(ref_X, ref_meta$SubClass, query_X)
+str(predicted_labels)
+
+meta$Prediction = c(ref_meta$SubClass, predicted_labels$Prediction)
+meta$Confidence = c(rep(NA, nrow(ref_meta)), predicted_labels$Confidence)
+signal_emb = Run.gcPCA(X, meta, g_factor = c("Prediction", "Dataset"), b_factor = "Batch",
+                       excluded.cells = which(meta$Dataset== 'query')[which(predicted_labels$Confidence < 0.8)])
+signal_umap = as.data.frame(umap(t(signal_emb)))
+colnames(signal_umap) = c("UMAP1", "UMAP2")
+signal_umap = cbind.data.frame(meta, signal_umap)
+q1 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Dataset", palette = c("#196534", "#9ED089"), legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+q2 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "SubClass", palette = Colors, legend = "right") + 
+  guides(colour = guide_legend(override.aes = list(size = 2)))
+q3 = ggscatter(signal_umap[which(meta$Dataset == "query"),], x = "UMAP1", y = "UMAP2", size = 0.1, color = "Confidence", legend = "right") + gradient_color(c("red",  "white", "blue"))
+plot_grid(q1, q2, q3, align = 'h', axis = "b", nrow = 1)
+```
+
+<details>
+  <summary>**Session Info**</summary>
+  
+```{r}
+sessionInfo()
+```
+
+</details>
