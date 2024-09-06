@@ -1,6 +1,6 @@
 # SIGNAL (SIngle-cell Group techNical vAriations Learning)
 
-`SIGNAL` is a R package for data integration by learning group technical variations.
+`SIGNAL` is a R package for data integration by learning group technical variations.  If you have any suggestions or problems on this package, please contact Y. Zhou (yangz@stu.hit.edu.cn), or submit through this GitHub page directly.
 <img src="https://github.com/yzhou1999/SIGNAL/blob/main/docs/logo.jpg" width="120" style="display: inline;">
 
 # Installation
