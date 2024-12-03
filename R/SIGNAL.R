@@ -7,7 +7,7 @@
 #'
 #' @param X Input data matrix.
 #' @param meta Input metadata (data.frame).
-#' @param g_factor Group variable (s).
+#' @param g_factor Group variable (s). Multiple group variables are allowed, and they do not have to be "cell type". The examples include: "cell type", c("stage", "tissue"), c("sex", "disease", "stage").
 #' @param b_factor Batch variable (s).
 #' @param lambda Tuning parameter.
 #' @param npcs How many dimensions to reduce.
@@ -33,9 +33,9 @@ Run.gcPCA <- function(X, meta, g_factor, b_factor, lambda = 50, npcs = 30, exclu
   if (do.scale) X <- scale_data(X, do.center = F)
   if (!is.matrix(X)) X <- as.matrix(X)
   options(bigstatsr.block.sizeGB = block.sizeGB)
-
+  
   X <- bigstatsr::big_copy(X, block.size = block.size)$save()
-
+  
   message("Run gcPCA!")
   N = length(g_factor)
   if (N == 1) {
@@ -45,7 +45,7 @@ Run.gcPCA <- function(X, meta, g_factor, b_factor, lambda = 50, npcs = 30, exclu
       G[excluded.cells, ] <- 0
       BG[excluded.cells, ] <- 0
     }
-
+    
     XXt <- bigstatsr::big_tcrossprodSelf(X, big_scale(center = FALSE, scale = FALSE), block.size = block.size)[]
     total_mmt <- group_mmt(X, matrix(1, nrow = ncol(X), ncol = 1) )
     g_mmt <- group_mmt(X, G)
@@ -73,7 +73,7 @@ Run.gcPCA <- function(X, meta, g_factor, b_factor, lambda = 50, npcs = 30, exclu
       cross_G[excluded.cells, ] <- 0
       cross_BG[excluded.cells, ] <- 0
     }
-
+    
     XXt <- bigstatsr::big_tcrossprodSelf(X, big_scale(center = FALSE, scale = FALSE), block.size = block.size)[]
     total_mmt <- group_mmt(X, matrix(1, nrow = ncol(X), ncol = 1) )
     g_mmt <- lapply(G_list, function(G) group_mmt(X, G))
@@ -83,6 +83,81 @@ Run.gcPCA <- function(X, meta, g_factor, b_factor, lambda = 50, npcs = 30, exclu
     V <- RSpectra::eigs_sym(XXt - total_mmt -
                               lambda*(Reduce('+', bg_mmt) - Reduce('+', g_mmt) -
                                         cross_bg_mmt + cross_g_mmt), k = npcs, which = "LA")[["vectors"]] %>% as.matrix()
+    gcpca_res <- t(bigstatsr::big_cprodMat(X, V))
+    if (do.cosine) gcpca_res <- cosineNorm(gcpca_res)
+    message("gcPCA done!")
+    if (output.all) gcpca_res = list('gcpca_res' = gcpca_res,
+                                     'XXt' = XXt,
+                                     'total_mmt' = total_mmt,
+                                     'g_mmt' = g_mmt,
+                                     'bg_mmt' = bg_mmt,
+                                     'V' = V)
+  } else if (N == 3) {
+    G_list = lapply(g_factor, function(g) group_onehot(meta, g))
+    BG_list = lapply(g_factor, function(g) group_onehot(meta, c(g, b_factor)))
+    cb = combn(3, 2)
+    cross_G_list = lapply(1:3, function(i) group_onehot(meta, g_factor[c(cb[1, i], cb[2, i])] ))
+    cross_BG_list = lapply(1:3, function(i) group_onehot(meta, c(g_factor[c(cb[1, i], cb[2, i])], b_factor) ))
+    cross_GG = group_onehot(meta, g_factor)
+    cross_BGG = group_onehot(meta, c(g_factor, b_factor))
+    if (!is.null(excluded.cells)) {
+      G_list <- lapply(G_list, function(x) {
+        x[excluded.cells, ] <- 0
+        x
+      })
+      BG_list <- lapply(BG_list, function(x) {
+        x[excluded.cells, ] <- 0
+        x
+      })
+      cross_G_list <- lapply(cross_G_list, function(x) {
+        x[excluded.cells, ] <- 0
+        x
+      })
+      cross_BG_list <- lapply(cross_BG_list, function(x) {
+        x[excluded.cells, ] <- 0
+        x
+      })
+      cross_GG[excluded.cells, ] <- 0
+      cross_BGG[excluded.cells, ] <- 0
+    }
+    
+    XXt <- bigstatsr::big_tcrossprodSelf(X, big_scale(center = FALSE, scale = FALSE), block.size = block.size)[]
+    total_mmt <- group_mmt(X, matrix(1, nrow = ncol(X), ncol = 1) )
+    g_mmt <- lapply(G_list, function(G) group_mmt(X, G))
+    bg_mmt <- lapply(BG_list, function(BG) group_mmt(X, BG))
+    cross_g_mmt <- lapply(cross_G_list, function(cross_G) group_mmt(X, cross_G))
+    cross_bg_mmt <- lapply(cross_BG_list, function(cross_BG) group_mmt(X, cross_BG))
+    cross_gg_mmt <- group_mmt(X, cross_GG)
+    cross_bgg_mmt <- group_mmt(X, cross_BGG)
+    V <- RSpectra::eigs_sym(XXt - total_mmt -
+                              lambda*(Reduce('+', bg_mmt) - Reduce('+', g_mmt) -
+                                        Reduce('+', cross_g_mmt) + Reduce('+', cross_bg_mmt) +
+                                        cross_gg_mmt + cross_bgg_mmt), k = npcs, which = "LA")[["vectors"]] %>% as.matrix()
+    gcpca_res <- t(bigstatsr::big_cprodMat(X, V))
+    if (do.cosine) gcpca_res <- cosineNorm(gcpca_res)
+    message("gcPCA done!")
+    if (output.all) gcpca_res = list('gcpca_res' = gcpca_res,
+                                     'XXt' = XXt,
+                                     'total_mmt' = total_mmt,
+                                     'g_mmt' = g_mmt,
+                                     'bg_mmt' = bg_mmt,
+                                     'V' = V)
+  } else if (N > 3) {
+    G_list = lapply(g_factor, function(g) group_onehot(meta, g))
+    BG_list = lapply(g_factor, function(g) group_onehot(meta, c(g, b_factor)))
+    if (!is.null(excluded.cells)) {
+      G_list[[1]][excluded.cells, ] <- 0
+      G_list[[2]][excluded.cells, ] <- 0
+      BG_list[[1]][excluded.cells, ] <- 0
+      BG_list[[2]][excluded.cells, ] <- 0
+    }
+    
+    XXt <- bigstatsr::big_tcrossprodSelf(X, big_scale(center = FALSE, scale = FALSE), block.size = block.size)[]
+    total_mmt <- group_mmt(X, matrix(1, nrow = ncol(X), ncol = 1) )
+    g_mmt <- lapply(G_list, function(G) group_mmt(X, G))
+    bg_mmt <- lapply(BG_list, function(BG) group_mmt(X, BG))
+    V <- RSpectra::eigs_sym(XXt - total_mmt -
+                              lambda*(Reduce('+', bg_mmt) - Reduce('+', g_mmt) ), k = npcs, which = "LA")[["vectors"]] %>% as.matrix()
     gcpca_res <- t(bigstatsr::big_cprodMat(X, V))
     if (do.cosine) gcpca_res <- cosineNorm(gcpca_res)
     message("gcPCA done!")
