@@ -16,9 +16,10 @@ knitr::opts_chunk$set(collapse = FALSE)
 
 # Introduction
 
-SIGNAL can be used to perform supervised integration of single-cell data. Given the metadata ``meta`` (a data frame containing meta information) as inputs, SIGNAL requires a batch variable ``b`` and at least one group variable ``g``. Using a feature-by-cell data matrix ``X`` (a matrix-like object) and batch and group variables, SIGNAL embeds ``X`` from multiple batches into a low-dimensional space that is not affected by batch effects, in which subgroups under the group variables of different batches are aligned together.
+SIGNAL integration requires at least one group variable, such as 'cell type,' 'developmental stage,' or 'tissue origin,' which is typically provided as metadata. Actually, SIGNAL only assumes homogeneity within subgroups under a given group variable.
 
-In this vignette we will demonstrate how to use SIGNAL to perform supervised integration, i.e., integration using 'cell type' as group variable.
+
+If there is no additional group variable entirely, one can consider manually adding a ‘source’ variable which indicates whether the cells come from the same source. However, as mentioned before, if the dataset is highly heterogeneous, SIGNAL cannot effectively integrate the dataset. We introduce a metric, between-batch similarity, to quantify the homogeneity across batches within a dataset. A high between-batch similarity indicates homogeneity. In contrast, when between-batch similarity is low, indicating heterogeneity, SIGNAL integration with a manually added ‘source’ variable may not succeed. Next, we show this using the heterogeneous cell lines dataset.
 
 ```{r, message=FALSE, warning=FALSE}
 library(SIGNAL)
@@ -31,44 +32,53 @@ set.seed(2024)
 
 # Load data matrix and metadata
 
-We demonstrate SIGNAL integration on a commonly used single-cell RNA sequencing (scRNA-seq) [dataset](https://www.10xgenomics.com/datasets/) of cell lines. The highly variable genes (HVGs) are already selected and are used to perform integration.
+We demonstrate SIGNAL integration on a commonly used single-cell RNA sequencing (scRNA-seq) [dataset](https://www.10xgenomics.com/datasets/) of cell lines. The highly variable genes (HVGs) are already selected and are used to perform integration. The dataset is highly heterogeneous across batches, as we can see the cell type compositions of the dataset.
 
 ```{r, message=FALSE, warning=FALSE}
 X = readRDS("/home/server/zy/group_scripts/datasets_preparation/Jurkat_293t/X.rds")
 meta = readRDS("/home/server/zy/group_scripts/datasets_preparation/Jurkat_293t/meta.rds")
+table(meta[, c("CellType", "Batch")])
 ```
 
-We can take a look of the data.
+We also compute the between-batch similarity.
 
-```{r, message=TRUE, warning=FALSE}
-str(X)
-str(meta)
+```{r, message=FALSE, warning=FALSE}
+batch_similarity <- function(data, meta, b_factor) {
+    scaled_data = SIGNAL:::scale_data(data)
+    b_ns = unique(meta[, b_factor])
+    b_means = sapply(b_ns, function(b) matrixStats::rowMedians(as.matrix(scaled_data[, which(meta[, b_factor] == b)] )))
+    colnames(b_means) = b_ns
+    b_means = scInt:::cosineNorm(b_means)
+    all_b_means = rowMeans(b_means)
+    mean(apply(b_means, 2, function(x) cor(x, all_b_means, method = 'pearson')))
+}
+print(round(batch_similarity(X, meta, 'Batch'), 2) )
 ```
 
-# Visualization of raw data
+# SIGNAL integration with a manually added 'source' variable
 
-Let us visualize the raw data using PCA and UMAP.
+We manually add a 'source' variable for all cells in the data. SIGNAL cannot separate two cell types.
 
 ```{r, message=TRUE, warning=FALSE, fig.width=12, fig.height=5}
-pca_res = irlba(t(X), nv = 30)
-raw_emb = as.matrix(pca_res$u %*% diag(pca_res$d))
-raw_umap = as.data.frame(umap(raw_emb))
-colnames(raw_umap) = c("UMAP1", "UMAP2")
-raw_umap = cbind.data.frame(meta, raw_umap)
-p1 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Batch", palette = "npg", legend = "right") + 
+meta$Source = '0'
+signal_emb = Run.gcPCA(X, meta, g_factor = "Source", b_factor = "Batch")
+signal_umap = as.data.frame(umap(t(signal_emb)))
+colnames(signal_umap) = c("UMAP1", "UMAP2")
+signal_umap = cbind.data.frame(meta, signal_umap)
+p1 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "Batch", palette = "npg", legend = "right") + 
   guides(colour = guide_legend(override.aes = list(size = 2)))
-p2 = ggscatter(raw_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "CellType", palette = "npg", legend = "right") + 
+p2 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "CellType", palette = "npg", legend = "right") + 
   guides(colour = guide_legend(override.aes = list(size = 2)))
 plot_grid(p1, p2, align = 'h', axis = "b")
 ```
 
-We can see that there are batch effects between Jurkat cells from batch 2 and batch 3.
+We then simulate batch labels to construct a homogeneous dataset and integrate it using SIGNAL using 'source' as the group variable.
 
-# SIGNAL supervised integration
-
-We perform SIGNAL supervised integration and visualize the integrated result. This usually takes a short time. It can integrate 1 million cells in ~2 minutes.
 ```{r, message=TRUE, warning=FALSE, fig.width=12, fig.height=5}
-signal_emb = Run.gcPCA(X, meta, g_factor = "CellType", b_factor = "Batch")
+meta$NewLabel = as.character(meta$Batch)
+meta$NewLabel[which(meta$NewLabel %in% c('Batch_1', 'Batch_2'))] = 'Simulated Batch_1'
+meta$NewLabel[which(meta$NewLabel == 'Batch_3')] = 'Simulated Batch_2'
+signal_emb = Run.gcPCA(X, meta, g_factor = "Source", b_factor = "NewLabel")
 signal_umap = as.data.frame(umap(t(signal_emb)))
 colnames(signal_umap) = c("UMAP1", "UMAP2")
 signal_umap = cbind.data.frame(meta, signal_umap)
@@ -78,6 +88,10 @@ q2 = ggscatter(signal_umap, x = "UMAP1", y = "UMAP2", size = 0.1, color = "CellT
   guides(colour = guide_legend(override.aes = list(size = 2)))
 plot_grid(q1, q2, align = 'h', axis = "b")
 ```
+
+# SIGNAL integration for highly homogeneous datasets without prior information
+
+To integrate the heterogeneous single-cell data without prior information, we recommend using additional unsupervised integration methods such as our previously proposed scInt and clustering techniques like k-means to create coarse cell labels. Then SIGNAL can be operated as a supervised integration method.
 
 <details>
   <summary>**Session Info**</summary>
