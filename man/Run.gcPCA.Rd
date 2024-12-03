@@ -24,7 +24,7 @@ Run.gcPCA(
 
 \item{meta}{Input metadata (data.frame).}
 
-\item{g_factor}{Group variable (s).}
+\item{g_factor}{Group variable (s). Multiple group variables are allowed, and they do not have to be "cell type". The examples include: "cell type", c("stage", "tissue"), c("sex", "disease", "stage").}
 
 \item{b_factor}{Batch variable (s).}
 
