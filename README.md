@@ -16,7 +16,6 @@ devtools::install_github("yzhou1999/SIGNAL")
 For usage examples, please see the `vignettes` directory of the repository.
 
 * [Supervised integration using SIGNAL](https://yzhou1999.github.io/SIGNAL/articles/Supervised_integration.html)
-* [SIGNAL integration for unlabeled datasets](https://yzhou1999.github.io/SIGNAL/articles/Unsupervised_integration.html)
 * [Multi-scale analysis using SIGNAL](https://yzhou1999.github.io/SIGNAL/articles/Multiscale_analysis.html)
 * [Knowledge transfer from reference to query using SIGNAL](https://yzhou1999.github.io/SIGNAL/articles/Knowledge_transfer.html)
 
