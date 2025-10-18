@@ -22,3 +22,6 @@ For usage examples, please see the `vignettes` directory of the repository.
 
 # Dependencies
 SIGNAL has been successfully installed and used on Windows, Linux and Mac OS (R version >= 4.0.2). The dependencies including: base, stats, Matrix, matrixStats, sparseMatrixStats, mclust, Rcpp, RcppEigen, irlba, BiocNeighbors, bigstatsr, dplyr, RSpectra.
+
+# Citation
+Zhou Y, Sheng Q, Jin S. 2025. Integrating single-cell data with biological variables. _P NATL ACAD SCI USA_ **122(18):** e2416516122.
